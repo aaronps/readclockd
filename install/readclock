@@ -1,0 +1,100 @@
+#!/sbin/sh
+
+xstatus() {
+        procname=readclockd
+        pid=$(ps -e |
+            while read _PID _TTY _TIME _CMD
+            do
+                [[ $_CMD = $procname ]] && echo $_PID
+            done)
+        if [[ -n $pid ]]; then
+                echo "readclockd is working with pid $pid"
+                rval=1;
+        else
+                echo "readclockd is stopped"
+                rval=0;
+        fi
+}
+
+xstart() {
+	isworking=`xstatus | awk '{print $3}'`
+	if [ $isworking = stopped ]; then
+		rval=0
+        	if [ -x /usr/sbin/readclockd ]
+		then
+                	/usr/sbin/readclockd && echo "readclockd  \c"
+                	if [ $? -ne 0 ]; then
+                        	rval=1
+                	fi
+        	else
+			echo "/usr/sbin/readclockd not found"
+                	rval=2
+        	fi
+	fi
+}
+
+xstop () {
+        procname=readclockd
+        pid=$(ps -e |
+            while read _PID _TTY _TIME _CMD
+            do
+                [[ $_CMD = $procname ]] && echo $_PID
+            done)
+        if [[ -n $pid ]]; then
+                if kill $pid; then
+                        echo "readclock stopped"
+                else
+                        rval=1
+                        echo "Unable to stop readclock"
+                fi
+        else
+                rval=1
+                echo "Unable to stop readclock (cannot find pid)"
+        fi
+}
+
+xcleanlog () {
+	logfile="/var/adm/readclock.log"
+	tail -n 1000 ${logfile} > ${logfile}.old
+	rm ${logfile}
+	mv ${logfile}.old ${logfile}
+}
+
+
+rval=0
+case $1 in
+start_msg)
+	echo "Start GPS clock synchronization"
+	;;
+
+stop_msg)
+	echo "Stopping GPS clock synchronization"
+	;;
+
+'start')
+	xstart
+	;;
+
+'stop')
+	xstop
+	;;
+'restart'|'reconfig')
+	xstop
+	sleep 1
+	xstart
+	;;
+'status')
+	xstatus
+	;;
+'cleanlog')
+	xstop
+	xcleanlog
+	xstart
+	;;
+*)
+	echo "usage: $0 {start|stop|restart|reconfig|status|cleanlog}"
+	rval=1
+	;;
+esac
+
+exit $rval
